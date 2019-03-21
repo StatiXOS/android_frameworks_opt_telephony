@@ -108,6 +108,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /**
@@ -271,6 +273,8 @@ public class ServiceStateTracker extends Handler {
     private final LocalLog mPhoneTypeLog = new LocalLog(10);
     private final LocalLog mRatLog = new LocalLog(20);
     private final LocalLog mRadioPowerLog = new LocalLog(20);
+
+    private Pattern mOperatorNameStringPattern;
 
     private class SstSubscriptionsChangedListener extends OnSubscriptionsChangedListener {
         public final AtomicInteger mPreviousSubId =
@@ -1035,6 +1039,10 @@ public class ServiceStateTracker extends Handler {
                     } else {
                         result.list = (List<CellInfo>) ar.result;
 
+                        cellInfo = (List<CellInfo>) ar.result;
+                        updateOperatorNameForCellInfo(cellInfo);
+                        mLastCellInfoList = cellInfo;
+                        mPhone.notifyCellInfo(cellInfo);
                         if (VDBG) {
                             log("EVENT_GET_CELL_INFO_LIST: size=" + result.list.size()
                                     + " list=" + result.list);
@@ -1138,6 +1146,9 @@ public class ServiceStateTracker extends Handler {
                             .getCellIdentity();
                     processCellLocationInfo(mCellLoc, cellIdentity);
                     mPhone.notifyLocationChanged();
+                    updateOperatorNameForCellIdentity(cellIdentity);
+                    mCellIdentity = cellIdentity;
+                    mPhone.notifyLocationChanged(getCellLocation());
                 }
 
                 // Release any temporary cell lock, which could have been
@@ -1669,6 +1680,10 @@ public class ServiceStateTracker extends Handler {
         mPollingContext[0]--;
 
         if (mPollingContext[0] == 0) {
+
+            mNewSS.setEmergencyOnly(mEmergencyOnly);
+            combinePsRegistrationStates(mNewSS);
+            updateOperatorNameForServiceState(mNewSS);
             if (mPhone.isPhoneTypeGsm()) {
                 updateRoamingState();
                 mNewSS.setEmergencyOnly(mEmergencyOnly);
@@ -1961,6 +1976,8 @@ public class ServiceStateTracker extends Handler {
                     String opNames[] = (String[]) ar.result;
 
                     if (opNames != null && opNames.length >= 3) {
+                        mNewSS.setOperatorAlphaLongRaw(opNames[0]);
+                        mNewSS.setOperatorAlphaShortRaw(opNames[1]);
                         // FIXME: Giving brandOverride higher precedence, is this desired?
                         String brandOverride = mUiccController.getUiccCard(getPhoneId()) != null
                                 ? mUiccController.getUiccCard(getPhoneId())
@@ -4106,6 +4123,11 @@ public class ServiceStateTracker extends Handler {
         if (config != null) {
             updateLteEarfcnLists(config);
             updateReportingCriteria(config);
+            String operatorNamePattern = config.getString(
+                    CarrierConfigManager.KEY_OPERATOR_NAME_FILTER_PATTERN_STRING);
+            if (!TextUtils.isEmpty(operatorNamePattern)) {
+                mOperatorNameStringPattern = Pattern.compile(operatorNamePattern);
+            }
         }
     }
 
@@ -4778,5 +4800,64 @@ public class ServiceStateTracker extends Handler {
 
     public LocaleTracker getLocaleTracker() {
         return mLocaleTracker;
+    }
+
+    String getCdmaEriText(int roamInd, int defRoamInd) {
+        return mEriManager.getCdmaEriText(roamInd, defRoamInd);
+    }
+
+    private void updateOperatorNameForServiceState(ServiceState servicestate) {
+        if (servicestate == null) {
+            return;
+        }
+
+        servicestate.setOperatorName(
+                filterOperatorNameByPattern(servicestate.getOperatorAlphaLong()),
+                filterOperatorNameByPattern(servicestate.getOperatorAlphaShort()),
+                servicestate.getOperatorNumeric());
+
+        List<NetworkRegistrationInfo> networkRegistrationInfos =
+                servicestate.getNetworkRegistrationInfoList();
+
+        for (int i = 0; i < networkRegistrationInfos.size(); i++) {
+            if (networkRegistrationInfos.get(i) != null) {
+                updateOperatorNameForCellIdentity(
+                        networkRegistrationInfos.get(i).getCellIdentity());
+            }
+        }
+    }
+
+    private void updateOperatorNameForCellIdentity(CellIdentity cellIdentity) {
+        if (cellIdentity == null) {
+            return;
+        }
+        cellIdentity.setOperatorAlphaLong(
+                filterOperatorNameByPattern((String) cellIdentity.getOperatorAlphaLong()));
+        cellIdentity.setOperatorAlphaShort(
+                filterOperatorNameByPattern((String) cellIdentity.getOperatorAlphaShort()));
+    }
+
+    private void updateOperatorNameForCellInfo(List<CellInfo> cellInfos) {
+        if (cellInfos == null || cellInfos.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < cellInfos.size(); i++) {
+            updateOperatorNameForCellIdentity(cellInfos.get(i).getCellIdentity());
+        }
+    }
+
+    private String filterOperatorNameByPattern(String operatorName) {
+        if (mOperatorNameStringPattern == null || TextUtils.isEmpty(operatorName)) {
+            return operatorName;
+        }
+        Matcher matcher = mOperatorNameStringPattern.matcher(operatorName);
+        if (matcher.find()) {
+            if (matcher.groupCount() > 0) {
+                operatorName = matcher.group(1);
+            } else {
+                log("filterOperatorNameByPattern: pattern no group");
+            }
+        }
+        return operatorName;
     }
 }
