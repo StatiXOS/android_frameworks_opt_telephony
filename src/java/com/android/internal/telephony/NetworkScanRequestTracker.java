@@ -376,6 +376,12 @@ public final class NetworkScanRequestTracker {
                 NetworkScanResult nsr = (NetworkScanResult) ar.result;
                 if (nsr.scanError == NetworkScan.SUCCESS) {
                     notifyMessenger(nsri, TelephonyScanManager.CALLBACK_SCAN_RESULTS,
+                    if (nsri.mPhone.getServiceStateTracker() != null) {
+                        nsri.mPhone.getServiceStateTracker().updateOperatorNameForCellInfo(
+                                nsr.networkInfos);
+                    }
+
+                    notifyMessenger(nsri, notifyMsg,
                             rilErrorToScanError(nsr.scanError), nsr.networkInfos);
                     if (nsr.scanStatus == NetworkScanResult.SCAN_STATUS_COMPLETE) {
                         deleteScanAndMayNotify(nsri, NetworkScan.SUCCESS, true);

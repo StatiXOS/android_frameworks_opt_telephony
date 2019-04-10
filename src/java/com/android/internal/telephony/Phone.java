@@ -201,6 +201,15 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     protected static final int EVENT_MODEM_RESET                    = 45;
 
     protected static final int EVENT_LAST                       = EVENT_MODEM_RESET;
+    protected static final int EVENT_VRS_OR_RAT_CHANGED             = 46;
+    // Radio state change
+    protected static final int EVENT_RADIO_STATE_CHANGED            = 47;
+    protected static final int EVENT_SET_CARRIER_DATA_ENABLED       = 48;
+    protected static final int EVENT_DEVICE_PROVISIONED_CHANGE      = 49;
+    protected static final int EVENT_DEVICE_PROVISIONING_DATA_SETTING_CHANGE = 50;
+    protected static final int EVENT_GET_AVAILABLE_NETWORKS_DONE    = 51;
+
+    protected static final int EVENT_LAST = EVENT_GET_AVAILABLE_NETWORKS_DONE;
 
     // For shared prefs.
     private static final String GSM_ROAMING_LIST_OVERRIDE_PREFIX = "gsm_roaming_list_";
